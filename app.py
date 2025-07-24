@@ -1,23 +1,44 @@
-import requests
+import streamlit as st
 import pandas as pd
-import time
+import requests
 from ta.trend import EMAIndicator, MACD
 from ta.momentum import RSIIndicator, StochRSIIndicator
+
+st.set_page_config(page_title="Crypto Signal Analyzer", layout="wide")
+st.title("🔍 Crypto Signal Analyzer")
+st.caption("Click below to check market signals using real-time Binance data")
+
+# ✅ Define 100 popular crypto pairs (Binance format)
+pairs = [
+    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "AVAXUSDT",
+    "DOGEUSDT", "SHIBUSDT", "DOTUSDT", "MATICUSDT", "LTCUSDT", "TRXUSDT", "LINKUSDT",
+    "BCHUSDT", "ATOMUSDT", "XLMUSDT", "UNIUSDT", "ETCUSDT", "NEARUSDT", "INJUSDT",
+    "OPUSDT", "ARBUSDT", "APTUSDT", "GRTUSDT", "SANDUSDT", "MANAUSDT", "RNDRUSDT",
+    "FTMUSDT", "EGLDUSDT", "AAVEUSDT", "RUNEUSDT", "ALGOUSDT", "FLOWUSDT", "KAVAUSDT",
+    "AXSUSDT", "CHZUSDT", "CRVUSDT", "DYDXUSDT", "HBARUSDT", "ONEUSDT", "BANDUSDT",
+    "SNXUSDT", "WAVESUSDT", "ZILUSDT", "CELRUSDT", "SKLUSDT", "COTIUSDT", "ENSUSDT",
+    "LINAUSDT", "FLMUSDT", "STMXUSDT", "TOMOUSDT", "ZRXUSDT", "NKNUSDT", "LRCUSDT",
+    "OCEANUSDT", "STORJUSDT", "SXPUSDT", "KNCUSDT", "MTLUSDT", "OMGUSDT", "BAKEUSDT",
+    "BELUSDT", "CTKUSDT", "FETUSDT", "LITUSDT", "ROSEUSDT", "PERPUSDT", "CVCUSDT",
+    "ANTUSDT", "BNTUSDT", "REEFUSDT", "TRBUSDT", "TLMUSDT", "ANKRUSDT", "QTUMUSDT",
+    "IOSTUSDT", "BICOUSDT", "GALUSDT", "PEOPLEUSDT", "BICOUSDT", "MASKUSDT", "HOOKUSDT",
+    "HIGHUSDT", "AGIXUSDT", "ACHUSDT", "CFXUSDT", "NMRUSDT", "IDUSDT", "KLAYUSDT",
+    "JOEUSDT", "XNOUSDT", "LAZIOUSDT", "XECUSDT", "GALAUSDT", "DASHUSDT", "YFIUSDT",
+    "ALICEUSDT", "BALUSDT", "DEGOUSDT", "TWTUSDT", "ICXUSDT"
+]
 
 def fetch_ohlcv(pair):
     try:
         url = f"https://api.binance.com/api/v3/klines?symbol={pair}&interval=5m&limit=50"
         response = requests.get(url)
         data = response.json()
-        if not isinstance(data, list) or len(data) == 0:
-            return None
-        df = pd.DataFrame(data, columns=["time", "open", "high", "low", "close", "volume", "_", "_", "_", "_", "_", "_"])
+        df = pd.DataFrame(data, columns=["time", "open", "high", "low", "close", "volume",
+                                         "_", "_", "_", "_", "_", "_"])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
-        df["open"] = df["open"].astype(float)
-        df["close"] = df["close"].astype(float)
+        df["close"] = pd.to_numeric(df["close"])
+        df["open"] = pd.to_numeric(df["open"])
         return df
-    except Exception as e:
-        print(f"[ERROR] Failed to fetch data for {pair}: {e}")
+    except:
         return None
 
 def analyze_candle(pair):
@@ -27,9 +48,11 @@ def analyze_candle(pair):
 
     df["ema"] = EMAIndicator(df["close"], window=10).ema_indicator()
     df["rsi"] = RSIIndicator(df["close"], window=14).rsi()
+
     macd = MACD(df["close"])
     df["macd"] = macd.macd()
     df["macd_signal"] = macd.macd_signal()
+
     stoch = StochRSIIndicator(df["close"])
     df["stochrsi"] = stoch.stochrsi()
 
@@ -39,55 +62,50 @@ def analyze_candle(pair):
 
     if latest["close"] > latest["ema"]:
         score += 1
-        conditions.append("Price above EMA")
+        conditions.append("📈 Price above EMA")
+
     if latest["rsi"] > 55:
         score += 1
-        conditions.append("RSI bullish")
+        conditions.append("💪 RSI bullish")
+
     if latest["macd"] > latest["macd_signal"]:
         score += 1
-        conditions.append("MACD crossover UP")
+        conditions.append("🔄 MACD crossover UP")
+
     if latest["stochrsi"] > 0.5:
         score += 1
-        conditions.append("StochRSI in buy zone")
+        conditions.append("⚡ StochRSI in buy zone")
 
     confidence = (score / 4) * 100
+
     if confidence >= 97:
-        direction = "UP" if latest["close"] >= latest["open"] else "DOWN"
+        direction = "UP"
+        if latest["close"] < latest["open"]:
+            direction = "DOWN"
         return {
             "pair": pair,
             "direction": direction,
             "confidence": confidence,
-            "conditions": conditions,
-            "time": latest.name
+            "conditions": conditions
         }
     else:
         return None
 
-# 🔥 List of 100 Binance Pairs (top coins with USDT)
-PAIR_LIST = [
-    "BTCUSDT", "ETHUSDT", "BNBUSDT", "SOLUSDT", "XRPUSDT", "ADAUSDT", "DOGEUSDT", "AVAXUSDT", "DOTUSDT", "MATICUSDT",
-    "LTCUSDT", "TRXUSDT", "SHIBUSDT", "LINKUSDT", "BCHUSDT", "UNIUSDT", "XLMUSDT", "ATOMUSDT", "HBARUSDT", "ICPUSDT",
-    "FILUSDT", "APTUSDT", "SUIUSDT", "ARBUSDT", "INJUSDT", "OPUSDT", "VETUSDT", "ETCUSDT", "GRTUSDT", "LDOUSDT",
-    "MKRUSDT", "AAVEUSDT", "NEARUSDT", "QNTUSDT", "STXUSDT", "ALGOUSDT", "IMXUSDT", "FTMUSDT", "SNXUSDT", "THETAUSDT",
-    "EOSUSDT", "CRVUSDT", "DYDXUSDT", "RUNEUSDT", "FLOWUSDT", "XTZUSDT", "KAVAUSDT", "GMXUSDT", "ENJUSDT", "1INCHUSDT",
-    "ZECUSDT", "CHZUSDT", "SANDUSDT", "MANAUSDT", "APEUSDT", "AXSUSDT", "CELOUSDT", "COMPUSDT", "KSMUSDT", "DASHUSDT",
-    "BANDUSDT", "COTIUSDT", "SKLUSDT", "ROSEUSDT", "ZILUSDT", "ARDRUSDT", "NMRUSDT", "LRCUSDT", "HOTUSDT", "STMXUSDT",
-    "MTLUSDT", "OMGUSDT", "ANKRUSDT", "OCEANUSDT", "ICXUSDT", "WAVESUSDT", "YFIUSDT", "BELUSDT", "XEMUSDT", "KNCUSDT",
-    "RLCUSDT", "CKBUSDT", "TOMOUSDT", "ZENUSDT", "CTSIUSDT", "QTUMUSDT", "PERLUSDT", "XNOUSDT", "BNTUSDT", "XVSUSDT",
-    "RENUSDT", "WRXUSDT", "SCUSDT", "CVCUSDT", "BAKEUSDT", "BLZUSDT", "BICOUSDT", "ALICEUSDT", "TRBUSDT", "SYSUSDT"
-]
+# 🚀 BUTTON TO RUN
+if st.button("🚦 Get Signals"):
+    with st.spinner("Analyzing markets..."):
+        signals = []
+        for pair in pairs:
+            result = analyze_candle(pair)
+            if result:
+                signals.append(result)
 
-# ✅ Run analysis for all pairs
-def run_all_pairs():
-    print("🔍 Scanning all 100 pairs for sureshot signals...\n")
-    for pair in PAIR_LIST:
-        result = analyze_candle(pair)
-        if result:
-            print(f"✅ SIGNAL | {result['pair']} | {result['direction']} | Confidence: {result['confidence']}%")
-            print("    → Conditions:", ", ".join(result["conditions"]))
-            print("    → Time:", result["time"])
-            print("-" * 50)
-        time.sleep(0.2)  # Avoid API rate limit
-
-if __name__ == "__main__":
-    run_all_pairs()
+    if signals:
+        st.success(f"Found {len(signals)} sureshot signals:")
+        for sig in signals:
+            st.markdown(f"### {sig['pair']}")
+            st.write(f"📊 **Direction:** {sig['direction']} — 🔥 Confidence: `{sig['confidence']:.0f}%`")
+            for cond in sig['conditions']:
+                st.write(f"- {cond}")
+    else:
+        st.warning("No high-confidence signals found at the moment.")
