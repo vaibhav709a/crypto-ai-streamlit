@@ -1,6 +1,6 @@
 import requests
 import pandas as pd
-import pandas_ta as ta
+import ta
 
 def fetch_ohlcv(symbol):
     base = "https://api.binance.com/api/v3/klines"
