@@ -1,38 +1,39 @@
 import streamlit as st
 from signal_logic import analyze_candle
 
-# Define list of USDT crypto pairs to analyze
+# List of 50+ popular crypto pairs (adjust as needed)
 pairs = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
-    "DOGE/USDT", "MATIC/USDT", "DOT/USDT", "LTC/USDT", "TRX/USDT",
-    "AVAX/USDT", "LINK/USDT", "UNI/USDT", "BCH/USDT", "ATOM/USDT",
-    "ETC/USDT", "XLM/USDT", "NEAR/USDT", "FIL/USDT", "ICP/USDT"
+    "BTC/USDT", "ETH/USDT", "BNB/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "DOT/USDT",
+    "AVAX/USDT", "TRX/USDT", "MATIC/USDT", "SHIB/USDT", "LTC/USDT", "LINK/USDT", "BCH/USDT", "ATOM/USDT",
+    "XLM/USDT", "FIL/USDT", "ICP/USDT", "NEAR/USDT", "ARB/USDT", "HBAR/USDT", "APT/USDT", "VET/USDT",
+    "OP/USDT", "QNT/USDT", "EGLD/USDT", "STX/USDT", "GRT/USDT", "IMX/USDT", "SAND/USDT", "MANA/USDT",
+    "THETA/USDT", "RNDR/USDT", "PEPE/USDT", "FET/USDT", "RUNE/USDT", "1INCH/USDT", "LDO/USDT", "CRV/USDT",
+    "DYDX/USDT", "ZIL/USDT", "FLOW/USDT", "CHZ/USDT", "AGIX/USDT", "ANKR/USDT", "COTI/USDT", "INJ/USDT",
+    "TWT/USDT", "GMT/USDT", "ENS/USDT", "SNX/USDT", "YFI/USDT", "KAVA/USDT", "BAL/USDT", "NKN/USDT"
 ]
 
-st.set_page_config(page_title="AI Crypto Signal", layout="centered")
-st.title("📊 AI Crypto Signal Predictor")
-st.markdown("Get **AI-analyzed 5-minute UP/DOWN direction** with >97% confidence.")
+st.set_page_config(page_title="📊 Crypto AI Signal Scanner", layout="wide")
+st.title("📈 Real-Time Crypto AI Signal Scanner")
+st.caption("Shows high-confidence 5-minute trade signals using EMA, RSI, MACD, and StochRSI")
 
-st.markdown("---")
-st.write("Select pairs to analyze or scan all:")
-
-selected_pairs = st.multiselect("Select Crypto Pairs", options=pairs, default=pairs[:5])
-
-if st.button("🔍 Scan Selected Pairs"):
-    st.info("Analyzing selected pairs... please wait.")
-    for pair in selected_pairs:
-        try:
+# Button to refresh signals
+if st.button("🔍 Scan All Pairs Now"):
+    results = []
+    with st.spinner("Analyzing all pairs..."):
+        for pair in pairs:
             result = analyze_candle(pair)
             if result:
-                st.success(f"📈 {pair} — **{result['direction']}** Signal (Confidence: {result['confidence']:.2f}%)")
-                st.markdown("**Conditions Matched:**")
-                for cond in result["conditions"]:
-                    st.markdown(f"- {cond}")
-                st.line_chart(result["chart_data"])
-            else:
-                st.warning(f"❌ No strong signal for {pair}")
-        except Exception as e:
-            st.error(f"Error analyzing {pair}: {str(e)}")
+                results.append({
+                    "Pair": pair,
+                    "Direction": result["direction"],
+                    "Confidence (%)": round(result["confidence"], 2),
+                    "Conditions": ", ".join(result["conditions"])
+                })
 
-st.markdown("---")
-st.caption("Powered by AI + Real-time Candle Analysis (TwelveData or compatible)")
+    if results:
+        st.success(f"✅ Found {len(results)} high-confidence signals")
+        st.dataframe(results)
+    else:
+        st.warning("⚠️ No high-confidence signals found right now.")
+else:
+    st.info("👆 Click the button above to start scanning 50+ crypto pairs.")
