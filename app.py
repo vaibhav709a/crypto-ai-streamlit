@@ -1,26 +1,38 @@
 import streamlit as st
-import pandas as pd
 from signal_logic import analyze_candle
 
-st.set_page_config(page_title="AI Crypto Analyzer", layout="wide")
-st.title("🚀 AI Crypto Candle Analyzer")
-
+# Define list of USDT crypto pairs to analyze
 pairs = [
-    "BTC/USDT", "ETH/USDT", "SOL/USDT", "BNB/USDT", "XRP/USDT",
-    "ADA/USDT", "DOGE/USDT", "MATIC/USDT", "DOT/USDT", "SHIB/USDT",
-    "AVAX/USDT", "LTC/USDT", "LINK/USDT", "ATOM/USDT", "UNI/USDT",
-    "NEAR/USDT", "APT/USDT", "ETC/USDT", "TRX/USDT", "FIL/USDT"
+    "BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT",
+    "DOGE/USDT", "MATIC/USDT", "DOT/USDT", "LTC/USDT", "TRX/USDT",
+    "AVAX/USDT", "LINK/USDT", "UNI/USDT", "BCH/USDT", "ATOM/USDT",
+    "ETC/USDT", "XLM/USDT", "NEAR/USDT", "FIL/USDT", "ICP/USDT"
 ]
 
-selected_pair = st.selectbox("Select Crypto Pair", pairs)
+st.set_page_config(page_title="AI Crypto Signal", layout="centered")
+st.title("📊 AI Crypto Signal Predictor")
+st.markdown("Get **AI-analyzed 5-minute UP/DOWN direction** with >97% confidence.")
 
-with st.spinner("Analyzing..."):
-    signal_result = analyze_candle(selected_pair)
+st.markdown("---")
+st.write("Select pairs to analyze or scan all:")
 
-if signal_result:
-    st.subheader(f"Prediction for next 5m candle:")
-    st.metric("Direction", "📈 UP" if signal_result["direction"] == "UP" else "📉 DOWN")
-    st.metric("Confidence", f'{signal_result["confidence"]:.2f}%')
-    st.line_chart(signal_result["chart_data"][-20:][["close", "ema", "rsi"]])
-else:
-    st.warning("No strong signal (97%+ confidence) found.")
+selected_pairs = st.multiselect("Select Crypto Pairs", options=pairs, default=pairs[:5])
+
+if st.button("🔍 Scan Selected Pairs"):
+    st.info("Analyzing selected pairs... please wait.")
+    for pair in selected_pairs:
+        try:
+            result = analyze_candle(pair)
+            if result:
+                st.success(f"📈 {pair} — **{result['direction']}** Signal (Confidence: {result['confidence']:.2f}%)")
+                st.markdown("**Conditions Matched:**")
+                for cond in result["conditions"]:
+                    st.markdown(f"- {cond}")
+                st.line_chart(result["chart_data"])
+            else:
+                st.warning(f"❌ No strong signal for {pair}")
+        except Exception as e:
+            st.error(f"Error analyzing {pair}: {str(e)}")
+
+st.markdown("---")
+st.caption("Powered by AI + Real-time Candle Analysis (TwelveData or compatible)")
