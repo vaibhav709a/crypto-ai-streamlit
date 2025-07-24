@@ -1,25 +1,27 @@
-import requests
 import pandas as pd
-import ta
+import requests
+from ta.trend import EMAIndicator, MACD
+from ta.momentum import RSIIndicator, StochRSIIndicator
 
-def fetch_ohlcv(symbol):
-    base = "https://api.binance.com/api/v3/klines"
-    params = {
-        "symbol": symbol.replace("/", ""),
-        "interval": "5m",
-        "limit": 100
-    }
+def fetch_ohlcv(pair):
     try:
-        response = requests.get(base, params=params)
+        url = f"https://api.binance.com/api/v3/klines?symbol={pair}&interval=5m&limit=50"
+        response = requests.get(url)
         data = response.json()
+
         df = pd.DataFrame(data, columns=[
             "time", "open", "high", "low", "close", "volume",
-            "_", "_", "_", "_", "_", "_"
+            "close_time", "quote_asset_volume", "number_of_trades",
+            "taker_buy_base_vol", "taker_buy_quote_vol", "ignore"
         ])
         df["time"] = pd.to_datetime(df["time"], unit="ms")
-        df = df.astype({"open": float, "high": float, "low": float, "close": float, "volume": float})
+        df["open"] = df["open"].astype(float)
+        df["high"] = df["high"].astype(float)
+        df["low"] = df["low"].astype(float)
+        df["close"] = df["close"].astype(float)
         return df
-    except:
+    except Exception as e:
+        print("❌ Failed to fetch data:", e)
         return None
 
 def analyze_candle(pair):
@@ -27,11 +29,15 @@ def analyze_candle(pair):
     if df is None or len(df) < 20:
         return None
 
-    df["ema"] = ta.ema(df["close"], length=10)
-    df["rsi"] = ta.rsi(df["close"], length=14)
-    macd = ta.macd(df["close"])
-    df = pd.concat([df, macd], axis=1)
-    df["stochrsi"] = ta.stochrsi(df["close"])
+    df["ema"] = EMAIndicator(df["close"], window=10).ema_indicator()
+    df["rsi"] = RSIIndicator(df["close"], window=14).rsi()
+
+    macd = MACD(df["close"])
+    df["macd"] = macd.macd()
+    df["macd_signal"] = macd.macd_signal()
+
+    stoch = StochRSIIndicator(df["close"])
+    df["stochrsi"] = stoch.stochrsi()
 
     latest = df.iloc[-1]
     score = 0
@@ -45,7 +51,7 @@ def analyze_candle(pair):
         score += 1
         conditions.append("RSI bullish")
 
-    if latest["MACD_1"] > latest["MACDs_1"]:
+    if latest["macd"] > latest["macd_signal"]:
         score += 1
         conditions.append("MACD crossover UP")
 
