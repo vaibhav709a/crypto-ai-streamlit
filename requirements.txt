@@ -1,1 +1,3 @@
-pip install streamlit requests pandas
+pip install --user streamlit
+pip install --user requests  
+pip install --user pandas
