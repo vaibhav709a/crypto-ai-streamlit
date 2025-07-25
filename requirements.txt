@@ -1,1 +1,2 @@
+# Install Plotly for full interactive charts
 pip install plotly
