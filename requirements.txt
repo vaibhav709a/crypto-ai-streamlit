@@ -1,4 +1,2 @@
-streamlit
-pandas
-requests
-ta
+# Install required packages
+pip install streamlit ccxt pandas numpy plotly websocket-client
