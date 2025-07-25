@@ -82,12 +82,10 @@ class CoinPaprikaAPI:
     def get_current_prices(self, coin_ids):
         """Get current prices for multiple coins"""
         try:
-            # Convert list to comma-separated string
-            ids_str = ','.join(coin_ids[:10])  # Limit to 10 for free tier
             url = f"{self.base_url}/tickers"
             params = {'quotes': 'USD'}
             
-            response = self.session.get(url, params=params, timeout=10)
+            response = self.session.get(url, params=params, timeout=15)
             
             if response.status_code == 200:
                 data = response.json()
@@ -214,22 +212,38 @@ class RealTradingSignals:
         end_date = datetime.now()
         start_date = end_date - timedelta(days=30)  # Get 30 days of data
         
+        # Show total count
+        total_coins = len(coin_ids)
+        status_text.text(f"Starting scan of {total_coins} cryptocurrencies...")
+        time.sleep(1)
+        
         for i, coin_id in enumerate(coin_ids):
             symbol = CRYPTO_PAIRS.get(coin_id, coin_id)
-            status_text.text(f"Scanning {symbol}... ({i+1}/{len(coin_ids)})")
-            progress_bar.progress((i + 1) / len(coin_ids))
+            status_text.text(f"Scanning {symbol}... ({i+1}/{total_coins})")
+            progress_bar.progress((i + 1) / total_coins)
             
-            df = self.api.get_coin_ohlcv(coin_id, start_date, end_date)
+            try:
+                df = self.api.get_coin_ohlcv(coin_id, start_date, end_date)
+                
+                if df is not None and len(df) >= self.bb_period:
+                    signal = self.detect_bb_signal(df)
+                    if signal:
+                        signals.append(signal)
+                        st.success(f"✅ Signal found: {symbol}")
+                else:
+                    st.warning(f"⚠️ Insufficient data for {symbol}")
+                    
+            except Exception as e:
+                st.error(f"❌ Error scanning {symbol}: {str(e)}")
             
-            if df is not None and len(df) >= self.bb_period:
-                signal = self.detect_bb_signal(df)
-                if signal:
-                    signals.append(signal)
-            
-            time.sleep(0.3)  # Rate limiting
+            # Adaptive rate limiting - slower for more reliable results
+            time.sleep(0.8)  # Increased delay to ensure all pairs are scanned
         
         progress_bar.empty()
+        status_text.text(f"✅ Scan completed! Analyzed {total_coins} pairs, found {len(signals)} signals.")
+        time.sleep(2)
         status_text.empty()
+        
         return signals
 
 def create_simple_chart_display(coin_id, trading_signals):
@@ -294,11 +308,25 @@ def main():
         
         # Coin selection
         st.subheader("📊 Select Cryptocurrencies")
+        
+        # Quick selection options
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("🔥 Top 10", use_container_width=True):
+                st.session_state.selected_coins = list(CRYPTO_PAIRS.keys())[:10]
+        with col2:
+            if st.button("💎 All 20", use_container_width=True):
+                st.session_state.selected_coins = list(CRYPTO_PAIRS.keys())
+        
+        # Initialize session state
+        if 'selected_coins' not in st.session_state:
+            st.session_state.selected_coins = list(CRYPTO_PAIRS.keys())[:10]
+        
         coin_names = [f"{CRYPTO_PAIRS[coin_id]} ({coin_id})" for coin_id in CRYPTO_PAIRS.keys()]
         selected_names = st.multiselect(
             "Choose coins to analyze:",
             coin_names,
-            default=coin_names[:8]
+            default=[f"{CRYPTO_PAIRS[coin_id]} ({coin_id})" for coin_id in st.session_state.selected_coins]
         )
         
         # Convert back to coin IDs
@@ -310,9 +338,16 @@ def main():
                     break
         
         if not selected_coins:
-            selected_coins = list(CRYPTO_PAIRS.keys())[:8]
+            selected_coins = list(CRYPTO_PAIRS.keys())[:10]
         
-        st.success(f"✅ {len(selected_coins)} coins selected")
+        # Update session state
+        st.session_state.selected_coins = selected_coins
+        
+        # Show selection count with warning for large selections
+        if len(selected_coins) > 15:
+            st.warning(f"⚠️ {len(selected_coins)} coins selected - Will take ~{len(selected_coins)*0.8/60:.1f} minutes to scan")
+        else:
+            st.success(f"✅ {len(selected_coins)} coins selected - Scan time: ~{len(selected_coins)*0.8/60:.1f} minutes")
         
         st.divider()
         st.markdown("**🌐 Data Source:**")
@@ -330,12 +365,33 @@ def main():
         col1, col2 = st.columns([3, 1])
         
         with col1:
+            # Warning for large scans
+            if len(selected_coins) > 10:
+                st.warning(f"⚠️ Large scan selected ({len(selected_coins)} pairs). This will take approximately {len(selected_coins)*0.8/60:.1f} minutes.")
+            
             if st.button("🔍 SCAN FOR TRADING SIGNALS", type="primary", use_container_width=True):
-                with st.spinner("Analyzing market data for BB reversal signals..."):
-                    signals = trading_signals.scan_for_signals(selected_coins)
+                with st.spinner(f"Analyzing {len(selected_coins)} cryptocurrencies for BB reversal signals..."):
+                    
+                    # Create a container for real-time updates
+                    scan_container = st.container()
+                    
+                    with scan_container:
+                        st.info(f"🔄 Starting comprehensive scan of {len(selected_coins)} pairs...")
+                        signals = trading_signals.scan_for_signals(selected_coins)
                 
                 if signals:
-                    st.success(f"🎯 {len(signals)} trading signal(s) detected!")
+                    st.balloons()  # Celebration for found signals!
+                    st.success(f"🎯 Found {len(signals)} trading signal(s) out of {len(selected_coins)} pairs analyzed!")
+                    
+                    # Show scan statistics
+                    scan_success_rate = (len(signals) / len(selected_coins)) * 100
+                    col_stat1, col_stat2, col_stat3 = st.columns(3)
+                    with col_stat1:
+                        st.metric("Pairs Scanned", len(selected_coins))
+                    with col_stat2:
+                        st.metric("Signals Found", len(signals))
+                    with col_stat3:
+                        st.metric("Success Rate", f"{scan_success_rate:.1f}%")
                     
                     # Sort by signal strength
                     signals.sort(key=lambda x: x['signal_strength'], reverse=True)
@@ -400,7 +456,14 @@ def main():
                             st.caption(f"⏰ Signal Time: {signal['timestamp'].strftime('%Y-%m-%d %H:%M:%S UTC')}")
                 
                 else:
-                    st.info("🔍 No signals found. Market conditions may not be suitable for BB reversal trades right now.")
+                    st.info(f"🔍 No signals found after scanning all {len(selected_coins)} pairs. Market conditions may not be suitable for BB reversal trades right now.")
+                    st.markdown("""
+                    **💡 Tips for finding signals:**
+                    - Try different BB parameters (period/std dev)
+                    - Market may be in consolidation phase
+                    - Check back during higher volatility periods
+                    - Consider scanning during different market hours
+                    """)
         
         with col2:
             st.markdown("**🎯 Signal Quality:**")
