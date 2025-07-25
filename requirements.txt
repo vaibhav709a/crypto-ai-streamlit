@@ -1,2 +1,6 @@
-# Install required packages
-pip install streamlit ccxt pandas numpy plotly websocket-client
+pip install streamlit
+pip install ccxt
+pip install pandas
+pip install numpy
+pip install plotly
+pip install websocket-client
