@@ -4,8 +4,6 @@ import pandas as pd
 import numpy as np
 import time
 from datetime import datetime, timedelta
-import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 import json
 
 # Page config
@@ -85,7 +83,7 @@ class CoinPaprikaAPI:
         """Get current prices for multiple coins"""
         try:
             # Convert list to comma-separated string
-            ids_str = ','.join(coin_ids)
+            ids_str = ','.join(coin_ids[:10])  # Limit to 10 for free tier
             url = f"{self.base_url}/tickers"
             params = {'quotes': 'USD'}
             
@@ -228,14 +226,14 @@ class RealTradingSignals:
                 if signal:
                     signals.append(signal)
             
-            time.sleep(0.2)  # Rate limiting
+            time.sleep(0.3)  # Rate limiting
         
         progress_bar.empty()
         status_text.empty()
         return signals
 
-def create_trading_chart(coin_id, trading_signals):
-    """Create professional trading chart with BB"""
+def create_simple_chart_display(coin_id, trading_signals):
+    """Create a simple text-based chart analysis"""
     end_date = datetime.now()
     start_date = end_date - timedelta(days=7)  # Last 7 days
     
@@ -245,98 +243,44 @@ def create_trading_chart(coin_id, trading_signals):
         return None
     
     df = trading_signals.calculate_bollinger_bands(df)
+    latest = df.iloc[-1]
     
-    fig = make_subplots(
-        rows=2, cols=1,
-        shared_xaxes=True,
-        vertical_spacing=0.05,
-        subplot_titles=[f'{CRYPTO_PAIRS[coin_id]} - 1D Chart with Bollinger Bands', 'Volume'],
-        row_heights=[0.8, 0.2]
-    )
-    
-    # Candlestick chart
-    fig.add_trace(
-        go.Candlestick(
-            x=df['timestamp'],
-            open=df['open'],
-            high=df['high'],
-            low=df['low'],
-            close=df['close'],
-            name='Price',
-            increasing_line_color='#26a69a',
-            decreasing_line_color='#ef5350'
-        ),
-        row=1, col=1
-    )
-    
-    # Bollinger Bands
-    fig.add_trace(
-        go.Scatter(
-            x=df['timestamp'], y=df['bb_upper'],
-            mode='lines', name='BB Upper',
-            line=dict(color='red', width=2, dash='dash'),
-            opacity=0.7
-        ), row=1, col=1
-    )
-    
-    fig.add_trace(
-        go.Scatter(
-            x=df['timestamp'], y=df['sma'],
-            mode='lines', name='BB Middle (SMA)',
-            line=dict(color='orange', width=2)
-        ), row=1, col=1
-    )
-    
-    fig.add_trace(
-        go.Scatter(
-            x=df['timestamp'], y=df['bb_lower'],
-            mode='lines', name='BB Lower',
-            line=dict(color='green', width=2, dash='dash'),
-            opacity=0.7
-        ), row=1, col=1
-    )
-    
-    # Check for signal on latest candle
+    # Check for signal
     signal = trading_signals.detect_bb_signal(df)
-    if signal:
-        fig.add_trace(
-            go.Scatter(
-                x=[signal['timestamp']],
-                y=[signal['entry_price']],
-                mode='markers+text',
-                marker=dict(size=20, color='red', symbol='triangle-down'),
-                text=['SHORT'],
-                textposition='top center',
-                name='Signal',
-                showlegend=True
-            ), row=1, col=1
-        )
     
-    # Volume bars
-    colors = ['green' if c >= o else 'red' for c, o in zip(df['close'], df['open'])]
+    chart_data = {
+        'symbol': CRYPTO_PAIRS[coin_id],
+        'current_price': latest['close'],
+        'bb_upper': latest['bb_upper'],
+        'bb_middle': latest['sma'],
+        'bb_lower': latest['bb_lower'],
+        'volume': latest['volume'],
+        'signal': signal,
+        'price_change_7d': ((latest['close'] - df.iloc[0]['close']) / df.iloc[0]['close']) * 100
+    }
     
-    fig.add_trace(
-        go.Bar(
-            x=df['timestamp'], y=df['volume'],
-            name='Volume',
-            marker_color=colors,
-            opacity=0.6
-        ), row=2, col=1
-    )
-    
-    fig.update_layout(
-        title=f"{CRYPTO_PAIRS[coin_id]} Trading Analysis",
-        template="plotly_dark",
-        height=700,
-        xaxis_rangeslider_visible=False,
-        showlegend=True
-    )
-    
-    return fig
+    return chart_data
 
 def main():
     st.title("🔥 Real Crypto Trading Signals")
     st.markdown("**Professional Bollinger Bands signals using CoinPaprika API - No restrictions!**")
+    
+    # Installation instructions
+    with st.expander("⚠️ Missing Charts? Install Plotly for Full Features"):
+        st.markdown("""
+        **To get interactive charts, install Plotly:**
+        
+        ```bash
+        pip install plotly
+        ```
+        
+        **Or if using conda:**
+        ```bash
+        conda install plotly
+        ```
+        
+        Then restart the app for full chart functionality!
+        """)
     
     # Sidebar configuration
     with st.sidebar:
@@ -354,7 +298,7 @@ def main():
         selected_names = st.multiselect(
             "Choose coins to analyze:",
             coin_names,
-            default=coin_names[:10]
+            default=coin_names[:8]
         )
         
         # Convert back to coin IDs
@@ -366,7 +310,7 @@ def main():
                     break
         
         if not selected_coins:
-            selected_coins = list(CRYPTO_PAIRS.keys())[:10]
+            selected_coins = list(CRYPTO_PAIRS.keys())[:8]
         
         st.success(f"✅ {len(selected_coins)} coins selected")
         
@@ -520,7 +464,8 @@ def main():
                 st.error("Failed to fetch market data. Please try again.")
     
     with tab3:
-        st.header("📈 Professional Chart Analysis")
+        st.header("📈 Chart Analysis (Text-Based)")
+        st.info("💡 Install Plotly to see interactive charts: `pip install plotly`")
         
         selected_coin = st.selectbox(
             "Select cryptocurrency for detailed analysis:",
@@ -528,37 +473,80 @@ def main():
             format_func=lambda x: CRYPTO_PAIRS[x]
         )
         
-        if st.button("📊 Generate Trading Chart"):
-            with st.spinner(f"Loading chart for {CRYPTO_PAIRS[selected_coin]}..."):
-                chart = create_trading_chart(selected_coin, trading_signals)
+        if st.button("📊 Analyze Chart Data"):
+            with st.spinner(f"Loading data for {CRYPTO_PAIRS[selected_coin]}..."):
+                chart_data = create_simple_chart_display(selected_coin, trading_signals)
                 
-                if chart:
-                    st.plotly_chart(chart, use_container_width=True)
+                if chart_data:
+                    st.subheader(f"📊 {chart_data['symbol']} Analysis")
                     
-                    # Analysis summary
-                    end_date = datetime.now()
-                    start_date = end_date - timedelta(days=7)
-                    df = trading_signals.api.get_coin_ohlcv(selected_coin, start_date, end_date)
+                    # Current metrics
+                    col1, col2, col3, col4 = st.columns(4)
                     
-                    if df is not None:
-                        signal = trading_signals.detect_bb_signal(df)
+                    with col1:
+                        st.metric("Current Price", f"${chart_data['current_price']:.6f}")
+                    with col2:
+                        st.metric("7D Change", f"{chart_data['price_change_7d']:.2f}%")
+                    with col3:
+                        st.metric("Volume", f"{chart_data['volume']:,.0f}")
+                    with col4:
+                        if chart_data['signal']:
+                            st.metric("Signal", "🎯 DETECTED")
+                        else:
+                            st.metric("Signal", "❌ None")
+                    
+                    # Bollinger Bands levels
+                    st.markdown("**📏 Bollinger Bands Levels:**")
+                    
+                    col1, col2, col3 = st.columns(3)
+                    with col1:
+                        st.metric("BB Upper", f"${chart_data['bb_upper']:.6f}")
+                    with col2:
+                        st.metric("BB Middle (SMA)", f"${chart_data['bb_middle']:.6f}")
+                    with col3:
+                        st.metric("BB Lower", f"${chart_data['bb_lower']:.6f}")
+                    
+                    # Price position analysis
+                    current_price = chart_data['current_price']
+                    bb_upper = chart_data['bb_upper']
+                    bb_middle = chart_data['bb_middle']
+                    bb_lower = chart_data['bb_lower']
+                    
+                    if current_price >= bb_upper:
+                        st.error("🔴 Price at/above BB Upper - Potential reversal zone")
+                    elif current_price >= bb_middle:
+                        st.warning("🟡 Price above BB Middle - Bullish territory")
+                    elif current_price >= bb_lower:
+                        st.info("🔵 Price below BB Middle - Bearish territory")
+                    else:
+                        st.success("🟢 Price at/below BB Lower - Potential bounce zone")
+                    
+                    # Signal details if exists
+                    if chart_data['signal']:
+                        signal = chart_data['signal']
+                        st.markdown("**🎯 Active Signal Details:**")
                         
                         col1, col2, col3 = st.columns(3)
-                        
                         with col1:
-                            if signal:
-                                st.success("🎯 Active Signal Detected!")
-                                st.metric("Signal Strength", f"{signal['signal_strength']}/10")
-                            else:
-                                st.info("No current signal")
-                        
+                            st.success(f"Signal Strength: {signal['signal_strength']}/10")
                         with col2:
-                            latest_price = df.iloc[-1]['close']
-                            st.metric("Current Price", f"${latest_price:.6f}")
-                        
+                            st.info(f"Entry: ${signal['entry_price']}")
                         with col3:
-                            price_change = ((df.iloc[-1]['close'] - df.iloc[-2]['close']) / df.iloc[-2]['close']) * 100
-                            st.metric("Last Change", f"{price_change:.2f}%")
+                            st.warning(f"Stop Loss: ${signal['stop_loss']}")
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            st.metric("Target 1", f"${signal['target_1']}")
+                        with col2:
+                            st.metric("Target 2", f"${signal['target_2']}")
+                        
+                        # Signal recommendation
+                        if signal['signal_strength'] >= 7:
+                            st.success("✅ **STRONG SIGNAL** - High probability trade")
+                        elif signal['signal_strength'] >= 5:
+                            st.warning("⚠️ **MODERATE SIGNAL** - Trade with caution")
+                        else:
+                            st.error("❌ **WEAK SIGNAL** - Consider waiting")
                 
                 else:
                     st.error("Unable to load chart data. Please try again.")
@@ -621,50 +609,6 @@ def main():
         - Wait for higher quality opportunities
         - Use for learning/observation only
         
-        ### ⏰ **Best Trading Conditions:**
-        
-        **Market Environment:**
-        - Trending or ranging markets work best
-        - Avoid during major news events
-        - Higher volatility = better signals
-        
-        **Time Considerations:**
-        - Daily timeframe for swing trades
-        - Multiple timeframe confirmation
-        - Check overall market sentiment
-        
-        ### 📈 **Advanced Tips:**
-        
-        **Multi-Timeframe Analysis:**
-        - Confirm signals on higher timeframes
-        - Use lower timeframes for precise entry
-        - Align with overall trend direction
-        
-        **Market Context:**
-        - Check major support/resistance levels
-        - Consider overall crypto market sentiment
-        - Watch Bitcoin correlation for altcoins
-        
-        **Risk-to-Reward Optimization:**
-        - Only take trades with 1:2+ R:R ratio
-        - Adjust targets based on market conditions
-        - Trail stop loss as price moves favorably
-        
-        ### ⚠️ **Important Warnings:**
-        
-        **Risk Disclosure:**
-        - Trading involves substantial risk of loss
-        - Never risk more than you can afford to lose
-        - Past performance doesn't guarantee future results
-        - This is educational content only, not financial advice
-        
-        **Common Mistakes to Avoid:**
-        - Trading every signal (be selective)
-        - Moving stop losses against you
-        - Ignoring risk management rules
-        - Over-leveraging positions
-        - Trading during low-volume periods
-        
         ### 🚀 **Getting Started:**
         
         **1. Practice First:**
@@ -682,20 +626,32 @@ def main():
         - Analyze your winning and losing trades
         - Stay updated with market news
         
-        **4. Scale Gradually:**
-        - Increase position sizes only after consistent profits
-        - Maintain proper risk management at all levels
-        - Don't rush the learning process
+        ### ⚠️ **Important Warnings:**
         
-        ### 🎯 **Success Metrics:**
+        **Risk Disclosure:**
+        - Trading involves substantial risk of loss
+        - Never risk more than you can afford to lose
+        - Past performance doesn't guarantee future results
+        - This is educational content only, not financial advice
         
-        **Track Your Performance:**
-        - Win rate (aim for 60%+)
-        - Average risk-to-reward ratio
-        - Maximum drawdown periods
-        - Monthly profit/loss
+        ### 📱 **App Features:**
         
-        **Remember**: Successful trading requires patience, discipline, and continuous learning. Focus on risk management over profits, and the profits will follow naturally.
+        **✅ Current Features:**
+        - Real-time signal detection
+        - Live price monitoring
+        - Text-based chart analysis
+        - Professional risk management
+        
+        **🔧 Enhanced Features (Install Plotly):**
+        ```bash
+        pip install plotly
+        ```
+        - Interactive candlestick charts
+        - Visual Bollinger Bands
+        - Signal markers on charts
+        - Advanced technical analysis
+        
+        **Remember**: This app uses real market data from CoinPaprika API and provides genuine trading signals. Always practice proper risk management!
         """)
 
 if __name__ == "__main__":
