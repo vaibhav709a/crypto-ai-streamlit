@@ -1,43 +1,38 @@
 import requests
 import pandas as pd
-import numpy as np
 
 def fetch_ohlcv(pair):
-    try:
-        url = f"https://api.binance.com/api/v3/klines?symbol={pair}&interval=5m&limit=50"
-        response = requests.get(url)
-        data = response.json()
-        df = pd.DataFrame(data, columns=[
-            'timestamp', 'open', 'high', 'low', 'close', 'volume',
-            'close_time', 'quote_asset_volume', 'number_of_trades',
-            'taker_buy_base_asset_volume', 'taker_buy_quote_asset_volume', 'ignore'
-        ])
-        df['close'] = df['close'].astype(float)
-        df['open'] = df['open'].astype(float)
-        return df
-    except Exception as e:
-        print(f"Error fetching {pair}: {e}")
-        return None
+    url = f"https://api.binance.com/api/v3/klines?symbol={pair}&interval=5m&limit=50"
+    response = requests.get(url)
+    data = response.json()
+    ohlcv = []
+
+    for d in data:
+        ohlcv.append({
+            'timestamp': d[0],
+            'open': float(d[1]),
+            'high': float(d[2]),
+            'low': float(d[3]),
+            'close': float(d[4]),
+            'volume': float(d[5]),
+        })
+
+    return pd.DataFrame(ohlcv)
 
 def check_bb_red_candle(pair):
     df = fetch_ohlcv(pair)
-    if df is None or len(df) < 20:
-        return None
 
-    df['ma'] = df['close'].rolling(window=20).mean()
-    df['std'] = df['close'].rolling(window=20).std()
-    df['upper_bb'] = df['ma'] + 2 * df['std']
-    last = df.iloc[-1]
+    if len(df) < 20:
+        return False  # Not enough data
 
-    if last['close'] < last['open'] and last['high'] >= last['upper_bb']:
-        return f"{pair}: DOWN signal (red candle touched upper BB)"
-    return None    hit_bb = high_price >= upper
+    df['MA20'] = df['close'].rolling(window=20).mean()
+    df['STD20'] = df['close'].rolling(window=20).std()
+    df['UpperBB'] = df['MA20'] + 2 * df['STD20']
 
-    if is_red and hit_bb:
-        return {
-            "pair": pair,
-            "direction": "DOWN",
-            "timestamp": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        }
+    last_candle = df.iloc[-1]
 
-    return None
+    # Condition: candle touched upper band AND closed red
+    if last_candle['high'] >= last_candle['UpperBB'] and last_candle['close'] < last_candle['open']:
+        return True
+
+    return False
