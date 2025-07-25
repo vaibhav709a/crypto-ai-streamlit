@@ -1,1 +1,1 @@
-
+pip install streamlit requests pandas numpy plotly
