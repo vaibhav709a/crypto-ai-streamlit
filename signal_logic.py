@@ -61,7 +61,7 @@ def analyze_candle(pair):
 
     confidence = (score / 4) * 100
 
-    if confidence >= 97:
+    if confidence >= 20:
         direction = "UP"
         if latest["close"] < latest["open"]:
             direction = "DOWN"
